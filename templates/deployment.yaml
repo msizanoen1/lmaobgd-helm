@@ -34,13 +34,17 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           command:
             - sh
-            - -c
+            - -ec
             - |
-              export DATABASE_URL=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              export DATABASE_URL=postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE
               diesel migration run
+              psql -c "
+              GRANT ALL PRIVILEGES ON DATABASE $PGDATABASE TO $LMAOBGD_USER_RT;
+              GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $LMAOBGD_USER_RT;
+              GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $LMAOBGD_USER_RT;"
           env:
           {{- if .Values.postgresql.enabled }}
-            - name: LMAOBGD_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                 {{- if not (eq .Values.postgresql.postgresqlUsername "postgres") }}
@@ -49,29 +53,33 @@ spec:
                   key: postgresql-password
                 {{- end }}
                   name: {{ include "lmaobgd.postgresql.fullname" . | quote }}
-            - name: LMAOBGD_USER
+            - name: PGUSER
               value: postgres
-            - name: LMAOBGD_HOST
+            - name: LMAOBGD_USER_RT
+              value: {{ .Values.postgresql.postgresqlUsername }}
+            - name: PGHOST
               value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
-            - name: LMAOBGD_PORT
+            - name: PGPORT
               value: {{ include "lmaobgd.postgresql.port" . | quote }}
-            - name: LMAOBGD_DATABASE
+            - name: PGDATABASE
               value: {{ .Values.postgresql.postgresqlDatabase | quote }}
           {{- else }}
-            - name: LMAOBGD_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "lmaobgd.fullname" . | quote }}
                   value: postgresql-postgres-password
 
-            - name: LMAOBGD_USER
+            - name: PGUSER
               value: {{ .Values.externalDatabase.superUser | quote }}
-            - name: LMAOBGD_HOST
+            - name: PGHOST
               value: {{ .Values.externalDatabase.host | quote }}
-            - name: LMAOBGD_PORT
+            - name: PGPORT
               value: {{ .Values.externalDatabase.port | quote }}
-            - name: LMAOBGD_DATABASE
+            - name: PGDATABASE
               value: {{ .Values.externalDatabase.database | quote }}
+            - name: LMAOBGD_USER_RT
+              value: {{ .Values.externalDatabase.user | quote }}
           {{- end }}
 
       containers:
@@ -81,49 +89,58 @@ spec:
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           command:
             - sh
-            - -c
+            - -ec
             - |
-              export DATABASE_URL=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              export DATABASE_URL=postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE
+              {{- if .Values.postgresql.enabled }}
               {{- if .Values.postgresql.replication.enabled }}
-              export DATABASE_URL_RO=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST_RO:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              export DATABASE_URL_RO=postgres://$PGUSER:$PGPASSWORD@$PGHOST_RO:$PGPORT/$PGDATABASE
               {{- end }}
-              lmaobgd --bind '[::]:80' --db-read-only-pool-size {{ .Values.dbReadOnlyPoolSize }} --db-writable-pool-size {{ .Values.dbWritablePoolSize }}
+              {{- end }}
+              lmaobgd \
+                  --bind '[::]:80' \
+                  --db-read-only-pool-size {{ .Values.dbReadOnlyPoolSize }} \
+                  --db-writable-pool-size {{ .Values.dbWritablePoolSize }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: RUST_LOG
               value: info
           {{- if .Values.postgresql.enabled }}
-            - name: LMAOBGD_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "lmaobgd.postgresql.fullname" . | quote }}
                   key: postgresql-password
-            - name: LMAOBGD_USER
+            - name: PGUSER
               value: {{ .Values.postgresql.postgresqlUsername | quote }}
-            - name: LMAOBGD_HOST
+            - name: PGHOST
               value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
           {{- if .Values.postgresql.replication.enabled }}
-            - name: LMAOBGD_HOST_RO
+            - name: PGHOST_RO
               value: '{{ include "lmaobgd.postgresql.fullname" . }}-read.{{ .Release.Namespace }}.svc.cluster.local'
           {{- end }}
-            - name: LMAOBGD_PORT
+            - name: PGPORT
               value: {{ include "lmaobgd.postgresql.port" . | quote }}
-            - name: LMAOBGD_DATABASE
+            - name: PGDATABASE
               value: {{ .Values.postgresql.postgresqlDatabase | quote }}
           {{- else }}
-            - name: LMAOBGD_PASSWORD
+            - name: PGPASSWORD
               valueFrom:
                 secretKeyRef:
                   name: {{ include "lmaobgd.fullname" . | quote }}
                   key: postgresql-password
 
-            - name: LMAOBGD_USER
+            - name: PGUSER
               value: {{ .Values.externalDatabase.user | quote }}
-            - name: LMAOBGD_HOST
+            - name: PGHOST
               value: {{ .Values.externalDatabase.host | quote }}
-            - name: LMAOBGD_PORT
+          {{- if .Values.externalDatabase.hostRead }}
+            - name: PGHOST_RO
+              value: {{ .Values.externalDatabase.hostRead | quote }}
+          {{- end }}
+            - name: PGPORT
               value: {{ .Values.externalDatabase.port | quote }}
-            - name: LMAOBGD_DATABASE
+            - name: PGDATABASE
               value: {{ .Values.externalDatabase.database | quote }}
           {{- end }}
           ports:

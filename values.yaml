@@ -8,7 +8,7 @@ image:
   repository: msizanoen/lmaobgd
   pullPolicy: IfNotPresent
   # Overrides the image tag whose default is the chart appVersion.
-  tag: latest
+  tag: "100"
 
 imagePullSecrets: []
 nameOverride: ""
@@ -83,6 +83,7 @@ externalDatabase:
   password: ""
   database: lmaobgd
   host: localhost
+  hostRead: ""
   port: 5432
   superUser: postgres
   superPassword: ""
@@ -90,8 +91,10 @@ externalDatabase:
 postgresql:
   enabled: true
   postgresqlDatabase: lmaobgd
+  postgresqlUsername: lmaobgd
   nameOverride: ""
   fullnameOverride: ""
+  postgresqlPostgresPassword: postgres_password
 
 dbReadOnlyPoolSize: 10
 dbWritablePoolSize: 10
