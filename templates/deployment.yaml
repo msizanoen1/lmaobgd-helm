@@ -36,8 +36,7 @@ spec:
             - sh
             - -ec
             - |
-              export DATABASE_URL=postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE
-              diesel migration run
+              diesel migration run --database-url postgres:///
               psql -c "
               GRANT ALL PRIVILEGES ON DATABASE $PGDATABASE TO $LMAOBGD_USER_RT;
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $LMAOBGD_USER_RT;
@@ -91,14 +90,14 @@ spec:
             - sh
             - -ec
             - |
-              export DATABASE_URL=postgres://$PGUSER:$PGPASSWORD@$PGHOST:$PGPORT/$PGDATABASE
               {{- if .Values.postgresql.enabled }}
               {{- if .Values.postgresql.replication.enabled }}
-              export DATABASE_URL_RO=postgres://$PGUSER:$PGPASSWORD@$PGHOST_RO:$PGPORT/$PGDATABASE
               {{- end }}
               {{- end }}
               lmaobgd \
                   --bind '[::]:80' \
+                  -d postgres:/// \
+                  --database-url-ro postgres://$PGHOST_RO/ \
                   --db-read-only-pool-size {{ .Values.dbReadOnlyPoolSize }} \
                   --db-writable-pool-size {{ .Values.dbWritablePoolSize }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
