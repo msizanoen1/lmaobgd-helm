@@ -1,0 +1,154 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "lmaobgd.fullname" . }}
+  labels:
+    {{- include "lmaobgd.labels" . | nindent 4 }}
+spec:
+{{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+{{- end }}
+  selector:
+    matchLabels:
+      {{- include "lmaobgd.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+    {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      labels:
+        {{- include "lmaobgd.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "lmaobgd.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      initContainers:
+        - name: {{ .Chart.Name }}-run-migrations
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command:
+            - sh
+            - -c
+            - |
+              export DATABASE_URL=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              diesel migration run
+          env:
+          {{- if .Values.postgresql.enabled }}
+            - name: LMAOBGD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                {{- if not (eq .Values.postgresql.postgresqlUsername "postgres") }}
+                  key: postgresql-postgres-password
+                {{- else }}
+                  key: postgresql-password
+                {{- end }}
+                  name: {{ include "lmaobgd.postgresql.fullname" . | quote }}
+            - name: LMAOBGD_USER
+              value: postgres
+            - name: LMAOBGD_HOST
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
+            - name: LMAOBGD_PORT
+              value: {{ include "lmaobgd.postgresql.port" . | quote }}
+            - name: LMAOBGD_DATABASE
+              value: {{ .Values.postgresql.postgresqlDatabase | quote }}
+          {{- else }}
+            - name: LMAOBGD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lmaobgd.fullname" . | quote }}
+                  value: postgresql-postgres-password
+
+            - name: LMAOBGD_USER
+              value: {{ .Values.externalDatabase.superUser | quote }}
+            - name: LMAOBGD_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: LMAOBGD_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: LMAOBGD_DATABASE
+              value: {{ .Values.externalDatabase.database | quote }}
+          {{- end }}
+
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          command:
+            - sh
+            - -c
+            - |
+              export DATABASE_URL=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              {{- if .Values.postgresql.replication.enabled }}
+              export DATABASE_URL_RO=postgres://$LMAOBGD_USER:$LMAOBGD_PASSWORD@$LMAOBGD_HOST_RO:$LMAOBGD_PORT/$LMAOBGD_DATABASE
+              {{- end }}
+              lmaobgd --bind '[::]:80' --db-read-only-pool-size {{ .Values.dbReadOnlyPoolSize }} --db-writable-pool-size {{ .Values.dbWritablePoolSize }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: RUST_LOG
+              value: info
+          {{- if .Values.postgresql.enabled }}
+            - name: LMAOBGD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lmaobgd.postgresql.fullname" . | quote }}
+                  key: postgresql-password
+            - name: LMAOBGD_USER
+              value: {{ .Values.postgresql.postgresqlUsername | quote }}
+            - name: LMAOBGD_HOST
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
+          {{- if .Values.postgresql.replication.enabled }}
+            - name: LMAOBGD_HOST_RO
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}-read.{{ .Release.Namespace }}.svc.cluster.local'
+          {{- end }}
+            - name: LMAOBGD_PORT
+              value: {{ include "lmaobgd.postgresql.port" . | quote }}
+            - name: LMAOBGD_DATABASE
+              value: {{ .Values.postgresql.postgresqlDatabase | quote }}
+          {{- else }}
+            - name: LMAOBGD_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "lmaobgd.fullname" . | quote }}
+                  key: postgresql-password
+
+            - name: LMAOBGD_USER
+              value: {{ .Values.externalDatabase.user | quote }}
+            - name: LMAOBGD_HOST
+              value: {{ .Values.externalDatabase.host | quote }}
+            - name: LMAOBGD_PORT
+              value: {{ .Values.externalDatabase.port | quote }}
+            - name: LMAOBGD_DATABASE
+              value: {{ .Values.externalDatabase.database | quote }}
+          {{- end }}
+          ports:
+            - name: http
+              containerPort: 80
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /api/check
+              port: http
+          readinessProbe:
+            httpGet:
+              path: /api/check
+              port: http
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
