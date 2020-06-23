@@ -57,7 +57,7 @@ spec:
             - name: LMAOBGD_USER_RT
               value: {{ .Values.postgresql.postgresqlUsername }}
             - name: PGHOST
-              value: {{ include "lmaobgd.postgresql.fullname" . | quote }}
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
             - name: PGPORT
               value: {{ include "lmaobgd.postgresql.port" . | quote }}
             - name: PGDATABASE
@@ -113,10 +113,10 @@ spec:
             - name: PGUSER
               value: {{ .Values.postgresql.postgresqlUsername | quote }}
             - name: PGHOST
-              value: {{ include "lmaobgd.postgresql.fullname" . | quote }}
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}.{{ .Release.Namespace }}.svc.cluster.local'
           {{- if .Values.postgresql.replication.enabled }}
             - name: PGHOST_RO
-              value: {{ printf "%s-read" (include "lmaobgd.postgresql.fullname" .) | quote }}
+              value: '{{ include "lmaobgd.postgresql.fullname" . }}-read.{{ .Release.Namespace }}.svc.cluster.local'
           {{- end }}
             - name: PGPORT
               value: {{ include "lmaobgd.postgresql.port" . | quote }}
