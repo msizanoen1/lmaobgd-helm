@@ -36,12 +36,17 @@ spec:
             - sh
             - -ec
             - |
-              diesel migration run --database-url postgres:///
+              until pg_isready; do
+                sleep 1
+              done
+              diesel migration run
               psql -c "
               GRANT ALL PRIVILEGES ON DATABASE $PGDATABASE TO $LMAOBGD_USER_RT;
               GRANT ALL PRIVILEGES ON ALL TABLES IN SCHEMA public TO $LMAOBGD_USER_RT;
               GRANT ALL PRIVILEGES ON ALL SEQUENCES IN SCHEMA public TO $LMAOBGD_USER_RT;"
           env:
+            - name: DATABASE_URL
+              value: postgres:///
           {{- if .Values.postgresql.enabled }}
             - name: PGPASSWORD
               valueFrom:
@@ -96,12 +101,14 @@ spec:
               {{- end }}
               lmaobgd \
                   --bind '[::]:80' \
-                  -d postgres:/// \
-                  --database-url-ro postgres://$PGHOST_RO/ \
                   --db-read-only-pool-size {{ .Values.dbReadOnlyPoolSize }} \
                   --db-writable-pool-size {{ .Values.dbWritablePoolSize }}
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
+            - name: DATABASE_URL
+              value: postgres:///
+            - name: DATABASE_URL_RO
+              value: 'postgres://{{ include "lmaobgd.postgresql.fullname" . }}-read/'
             - name: RUST_LOG
               value: info
           {{- if .Values.postgresql.enabled }}
