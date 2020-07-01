@@ -107,8 +107,10 @@ spec:
           env:
             - name: DATABASE_URL
               value: postgres:///
+          {{- if .Values.postgresql.replication.enabled }}
             - name: DATABASE_URL_RO
               value: 'postgres://{{ include "lmaobgd.postgresql.fullname" . }}-read/'
+          {{- end }}
             - name: RUST_LOG
               value: info
           {{- if .Values.postgresql.enabled }}
